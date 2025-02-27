@@ -3,7 +3,7 @@ from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from langchain.tools import Tool, StructuredTool
 from langchain.agents import AgentExecutor, create_structured_chat_agent
-from langchain.schema import AgentAction, AgentFinish, HumanMessage, AIMessage
+from langchain.schema import AgentAction, AgentFinish, HumanMessage, AIMessage, SystemMessage
 from agents.aws.aws_agent import AWSAgent
 from agents.azure.azure_agent import AzureAgent
 from generators.manifest_generator import ManifestGenerator
@@ -13,6 +13,8 @@ import logging
 import json
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, List
+from langchain.agents.format_scratchpad import format_to_openai_function_messages
+from langchain.agents.output_parsers import OpenAIFunctionsAgentOutputParser
 
 logger = logging.getLogger(__name__)
 
@@ -85,8 +87,58 @@ class OrchestratorAgent:
             MessagesPlaceholder(variable_name="agent_scratchpad")
         ])
         
-        self.agent_executor = AgentExecutor(
-            agent=create_structured_chat_agent(
+        def create_structured_chat_agent_updated(llm, tools, prompt):
+            tool_descriptions = []
+            tool_names = [tool.name for tool in tools]
+            
+            for tool in tools:
+                if hasattr(tool, "args_schema"):
+                    schema = tool.args_schema.schema()
+                    parameters = {
+                        "type": "object",
+                        "properties": schema.get("properties", {}),
+                        "required": schema.get("required", []),
+                        "additionalProperties": False
+                    }
+                else:
+                    parameters = {
+                        "type": "object", 
+                        "properties": {},
+                        "additionalProperties": False
+                    }
+                
+                function_def = {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": parameters
+                }
+                
+                tool_descriptions.append(function_def)
+            
+            print(f"Tool descriptions: {json.dumps(tool_descriptions, indent=2)}")
+            
+            tool_strings = []
+            for tool in tools:
+                tool_strings.append(f"{tool.name}: {tool.description}")
+            tools_string = "\n".join(tool_strings)
+            
+            agent = (
+                {
+                    "input": lambda x: x["input"],
+                    "chat_history": lambda x: x.get("chat_history", []),
+                    "agent_scratchpad": lambda x: format_to_openai_function_messages(x.get("intermediate_steps", [])),
+                    "tools": lambda x: tools_string,
+                    "tool_names": lambda x: ", ".join(tool_names)
+                }
+                | prompt
+                | llm.bind(functions=tool_descriptions)
+                | OpenAIFunctionsAgentOutputParser()
+            )
+            
+            return agent
+
+        self.agent_executor = AgentExecutor.from_agent_and_tools(
+            agent=create_structured_chat_agent_updated(
                 llm=self.llm,
                 tools=tools,
                 prompt=chat_prompt
@@ -95,7 +147,6 @@ class OrchestratorAgent:
             memory=self.memory,
             verbose=True,
             max_iterations=3,
-            max_execution_time=60,
             handle_parsing_errors=True
         )
         
@@ -125,8 +176,10 @@ class OrchestratorAgent:
                 return agent.process_message(user_input)
             else:
                 logger.info("Determining cloud provider")
+                print(user_input)
+                print("determining cloud provider")
                 result = self.agent_executor.invoke({"input": user_input})
-                
+                print(result)
                 if isinstance(result, dict) and "output" in result:
                     result_text = result["output"]
                 else:
@@ -138,10 +191,8 @@ class OrchestratorAgent:
             return "I encountered an error. Let's start over. What cloud provider would you like to use? (AWS or Azure)"
 
     @handle_errors
-    def _determine_cloud_provider_tool(self, params: UserInputSchema) -> dict:
+    def _determine_cloud_provider_tool(self, user_input: str) -> dict:
         """Tool to determine which cloud provider the user wants to use"""
-        user_input = params.user_input
-        
         try:
             response = self.cloud_chain.invoke({"user_input": user_input})
             cloud_provider = response.get("text", "").strip().lower()
@@ -171,8 +222,7 @@ class OrchestratorAgent:
                     provider_selected_prompt.format(
                         cloud_provider=cloud_provider.upper()
                     )
-                ).strip()
-                
+                )
                 return {
                     "cloud_provider": cloud_provider,
                     "message": response or f"Great! I'll help you create a {cloud_provider.upper()} resource with Crossplane. What type of {cloud_provider.upper()} resource would you like to create?"

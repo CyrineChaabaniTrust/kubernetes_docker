@@ -10,15 +10,17 @@ load_dotenv(dotenv_path)
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from langchain.llms import OpenAI
+from langchain_openai import ChatOpenAI
 from agents.orchestrator import OrchestratorAgent
 from utils.conversation_state import ConversationState
 from utils.error_handler import handle_errors, CrossplaneError
+from flask import session
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'crossplane-chatbot-secret!')
 
 active_conversations = {}
+
 
 @app.route('/')
 def index():
@@ -44,7 +46,7 @@ def initialize_conversation():
                     'error': 'OpenAI API key not set. Please check your .env file.'
                 }), 500
             
-            llm = OpenAI(api_key=api_key)
+            llm = ChatOpenAI(api_key=api_key, model="gpt-3.5-turbo")
             
             state = ConversationState(conversation_id=conversation_id)
             
@@ -136,6 +138,7 @@ def chat():
         })
     
     try:
+        print(user_input)
         response = orchestrator.process_message(user_input)
         
         if isinstance(response, dict) and response.get('error'):

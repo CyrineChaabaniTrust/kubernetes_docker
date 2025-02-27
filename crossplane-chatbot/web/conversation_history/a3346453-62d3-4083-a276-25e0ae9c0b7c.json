@@ -1,22 +1,24 @@
 {
   "conversation_id": "a3346453-62d3-4083-a276-25e0ae9c0b7c",
-  "start_time": "2025-02-27T15:43:23.070278",
-  "current_step": "initial",
-  "cloud_provider": null,
+  "start_time": "2025-02-27T16:22:32.858865",
+  "current_step": "select_resource",
+  "cloud_provider": "aws",
   "resource_type": null,
   "collected_data": {},
   "history": [
     {
       "role": "user",
-      "message": "azure",
-      "timestamp": "2025-02-27T15:43:26.577611"
+      "message": "aws",
+      "timestamp": "2025-02-27T16:22:35.115988"
     },
     {
       "role": "assistant",
-      "message": "I encountered an error. Let's start over. What cloud provider would you like to use? (AWS or Azure)",
-      "timestamp": "2025-02-27T15:43:26.598285"
+      "message": "Absolutely, I'd be happy to assist you with AWS resources! What type of AWS resource are you looking to create today?",
+      "timestamp": "2025-02-27T16:22:37.162513"
     }
   ],
   "error_count": 0,
-  "completed_steps": []
+  "completed_steps": [
+    "select_provider"
+  ]
 }
