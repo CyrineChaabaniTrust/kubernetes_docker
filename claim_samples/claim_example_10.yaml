@@ -1,0 +1,21 @@
+# Azure SQL Server
+apiVersion: database.azure.crossplane.io/v1alpha1
+kind: SQLServer
+metadata:
+  name: example-sqlserver
+spec:
+  forProvider:
+    location: eastus
+    resourceGroupName: example-rg
+    administratorLogin: admin
+    version: "12.0"
+    administrators:
+      administratorType: ActiveDirectory
+      login: example@domain.com
+      sid: "12345678-1234-1234-1234-123456789012"
+      tenantId: "12345678-1234-1234-1234-123456789012"
+  writeConnectionSecretToRef:
+    name: example-sqlserver-conn
+    namespace: crossplane-system
+  providerConfigRef:
+    name: azure-provider 

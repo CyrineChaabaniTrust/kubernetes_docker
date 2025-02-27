@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["name", "region", "instance_class", "master_username", "allocated_storage", "engine"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the RDS instance"
+    },
+    "region": {
+      "type": "string",
+      "pattern": "^[a-z]{2}-[a-z]+-[0-9]$",
+      "description": "The AWS region for the RDS instance"
+    },
+    "instance_class": {
+      "type": "string",
+      "description": "The compute and memory capacity of the RDS instance"
+    },
+    "master_username": {
+      "type": "string",
+      "description": "The master username for the RDS instance"
+    },
+    "allocated_storage": {
+      "type": "string",
+      "pattern": "^[0-9]+$",
+      "description": "The allocated storage in GB"
+    },
+    "engine": {
+      "type": "string",
+      "enum": ["mysql", "postgres", "mariadb", "oracle", "sqlserver"],
+      "description": "The database engine to use"
+    },
+    "engine_version": {
+      "type": "string",
+      "description": "The version of the database engine"
+    },
+    "storage_type": {
+      "type": "string",
+      "enum": ["gp2", "io1", "standard"],
+      "description": "The storage type to use"
+    },
+    "password_secret_name": {
+      "type": "string",
+      "description": "The name of the secret containing the master password"
+    }
+  }
+} 

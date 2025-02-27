@@ -1,0 +1,14 @@
+# Composite Kubernetes Cluster (Cloud-Agnostic)
+apiVersion: container.example.org/v1alpha1
+kind: CompositeKubernetesCluster
+metadata:
+  name: my-k8s
+spec:
+  parameters:
+    version: "1.24"
+    nodeCount: 3
+    nodeSizeType: standard
+    region: us-west
+    highAvailability: true
+  compositionRef:
+    name: production-kubernetes 

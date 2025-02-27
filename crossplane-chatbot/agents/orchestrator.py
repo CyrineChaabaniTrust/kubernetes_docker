@@ -1,0 +1,217 @@
+from langchain.memory import ConversationBufferMemory
+from langchain.chains import LLMChain
+from langchain.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate, HumanMessagePromptTemplate
+from langchain.tools import Tool, StructuredTool
+from langchain.agents import AgentExecutor, create_structured_chat_agent
+from langchain.schema import AgentAction, AgentFinish, HumanMessage, AIMessage
+from agents.aws.aws_agent import AWSAgent
+from agents.azure.azure_agent import AzureAgent
+from generators.manifest_generator import ManifestGenerator
+from utils.conversation_state import ConversationState
+from utils.error_handler import handle_errors, ResourceNotSupportedError
+import logging
+import json
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, List
+
+logger = logging.getLogger(__name__)
+
+class UserInputSchema(BaseModel):
+    user_input: str = Field(..., description="The input from the user")
+
+class EmptySchema(BaseModel):
+    pass
+
+class OrchestratorAgent:
+    def __init__(self, llm, state=None):
+        self.llm = llm
+        self.state = state or ConversationState()
+        self.memory = ConversationBufferMemory(
+            memory_key="chat_history",
+            return_messages=True
+        )
+        self.cloud_agents = {
+            'aws': AWSAgent(llm, self.state),
+            'azure': AzureAgent(llm, self.state)
+        }
+        self.manifest_generator = ManifestGenerator()
+        
+        tools = [
+            StructuredTool.from_function(
+                name="determine_cloud_provider",
+                description="Determines which cloud provider (AWS or Azure) the user wants to use",
+                func=self._determine_cloud_provider_tool,
+                args_schema=UserInputSchema,
+                return_direct=False
+            ),
+            StructuredTool.from_function(
+                name="get_current_state",
+                description="Gets the current state of the conversation workflow",
+                func=self._get_current_state_tool,
+                args_schema=EmptySchema,
+                return_direct=False
+            ),
+            StructuredTool.from_function(
+                name="reset_conversation",
+                description="Resets the conversation to start over",
+                func=self._reset_conversation_tool,
+                args_schema=EmptySchema,
+                return_direct=False
+            )
+        ]
+        
+        tool_names = [tool.name for tool in tools]
+        
+        system_message_prompt = SystemMessagePromptTemplate.from_template(
+            """You are a Crossplane specialist helping users create infrastructure manifests for cloud providers.
+            
+            Your main role is to identify which cloud provider the user wants to use (AWS or Azure).
+            Once the cloud provider is determined, you'll delegate to the appropriate specialist.
+            
+            You have access to the following tools: {tools}
+            
+            The available tools are: {tool_names}
+            
+            Always use the most appropriate tool for the job.
+            """
+        )
+        
+        human_message_prompt = HumanMessagePromptTemplate.from_template("{input}")
+        
+        chat_prompt = ChatPromptTemplate.from_messages([
+            system_message_prompt,
+            MessagesPlaceholder(variable_name="chat_history"),
+            human_message_prompt,
+            MessagesPlaceholder(variable_name="agent_scratchpad")
+        ])
+        
+        self.agent_executor = AgentExecutor(
+            agent=create_structured_chat_agent(
+                llm=self.llm,
+                tools=tools,
+                prompt=chat_prompt
+            ),
+            tools=tools,
+            memory=self.memory,
+            verbose=True,
+            max_iterations=3,
+            max_execution_time=60,
+            handle_parsing_errors=True
+        )
+        
+        self.cloud_prompt = PromptTemplate(
+            input_variables=["user_input"],
+            template="""
+            Based on the user's input, determine which cloud provider they want to use.
+            User input: {user_input}
+            
+            Reply with only one of the following options: 'aws', 'azure', or 'unknown'.
+            """
+        )
+        self.cloud_chain = LLMChain(llm=llm, prompt=self.cloud_prompt)
+
+    @handle_errors
+    def process_message(self, user_input):
+        """Process a message, determining cloud provider or forwarding to agent"""
+        try:
+            cloud_provider = self.state.state.get("cloud_provider")
+            
+            if cloud_provider:
+                logger.info(f"Forwarding message to {cloud_provider} agent")
+                agent = self.cloud_agents.get(cloud_provider)
+                if not agent:
+                    return f"I'm sorry, I'm having trouble with the {cloud_provider.upper()} agent. Let's try again."
+                
+                return agent.process_message(user_input)
+            else:
+                logger.info("Determining cloud provider")
+                result = self.agent_executor.invoke({"input": user_input})
+                
+                if isinstance(result, dict) and "output" in result:
+                    result_text = result["output"]
+                else:
+                    result_text = str(result)
+                
+                return result_text
+        except Exception as e:
+            logger.error(f"Error processing message: {str(e)}")
+            return "I encountered an error. Let's start over. What cloud provider would you like to use? (AWS or Azure)"
+
+    @handle_errors
+    def _determine_cloud_provider_tool(self, params: UserInputSchema) -> dict:
+        """Tool to determine which cloud provider the user wants to use"""
+        user_input = params.user_input
+        
+        try:
+            response = self.cloud_chain.invoke({"user_input": user_input})
+            cloud_provider = response.get("text", "").strip().lower()
+            
+            if cloud_provider not in ["aws", "azure"]:
+                prompt = f"Based on this user message: '{user_input}', what cloud provider are they asking about? Answer with only 'aws', 'azure', or 'unknown'."
+                cloud_provider = self.llm.invoke(prompt).strip().lower()
+            
+            if cloud_provider in ["aws", "azure"]:
+                logger.info(f"Determined cloud provider: {cloud_provider}")
+                self.state.update(cloud_provider=cloud_provider, current_step="select_resource")
+                self.state.mark_step_complete("select_provider")
+                
+                provider_selected_prompt = PromptTemplate(
+                    input_variables=["cloud_provider"],
+                    template="""
+                    You are a helpful assistant who has just identified that the user wants to use {cloud_provider}.
+                    
+                    Generate a friendly, conversational response that:
+                    1. Confirms you'll help them with {cloud_provider} resources
+                    2. Asks what type of {cloud_provider} resource they want to create
+                    3. Is brief (1-2 sentences) and professional
+                    """
+                )
+                
+                response = self.llm.invoke(
+                    provider_selected_prompt.format(
+                        cloud_provider=cloud_provider.upper()
+                    )
+                ).strip()
+                
+                return {
+                    "cloud_provider": cloud_provider,
+                    "message": response or f"Great! I'll help you create a {cloud_provider.upper()} resource with Crossplane. What type of {cloud_provider.upper()} resource would you like to create?"
+                }
+            else:
+                return {
+                    "cloud_provider": "unknown",
+                    "message": "I'm not sure which cloud provider you want to use. Could you please specify if you want to use AWS or Azure?"
+                }
+        except Exception as e:
+            logger.error(f"Error determining cloud provider: {str(e)}")
+            return {
+                "error": str(e),
+                "message": "I'm having trouble understanding which cloud provider you want to use. Could you please clearly state if you want to use AWS or Azure?"
+            }
+    
+    def _get_current_state_tool(self, params: EmptySchema) -> dict:
+        """Tool to get the current state of the conversation workflow"""
+        current_step = self.state.state.get("current_step", "initial")
+        cloud_provider = self.state.state.get("cloud_provider")
+        resource_type = self.state.state.get("resource_type")
+        collected_data = self.state.state.get("collected_data", {})
+        
+        return {
+            "current_step": current_step,
+            "cloud_provider": cloud_provider,
+            "resource_type": resource_type,
+            "collected_data": collected_data,
+            "message": f"Current step: {current_step}, Cloud provider: {cloud_provider}, Resource type: {resource_type}, Collected data fields: {list(collected_data.keys()) if collected_data else 'None'}"
+        }
+    
+    def _reset_conversation_tool(self, params: EmptySchema) -> dict:
+        """Tool to reset the conversation to start over with a new resource"""
+        self.state = ConversationState(conversation_id=self.state.conversation_id)
+        
+        for provider, agent in self.cloud_agents.items():
+            agent.state = self.state
+        
+        return {
+            "state_reset": True,
+            "message": "I've reset our conversation. What cloud provider would you like to use? (AWS or Azure)"
+        }

@@ -1,0 +1,17 @@
+#Claiming an AWS RDS Database Instance
+apiVersion: database.aws.crossplane.io/v1alpha1
+kind: RDSInstance
+metadata:
+  name: example-mysql
+spec:
+  forProvider:
+    dbInstanceClass: db.t3.micro
+    masterUsername: admin
+    allocatedStorage: 20
+    engine: mysql
+    engineVersion: "8.0"
+  writeConnectionSecretToRef:
+    name: example-mysql-conn
+    namespace: crossplane-system
+  providerConfigRef:
+    name: aws-provider

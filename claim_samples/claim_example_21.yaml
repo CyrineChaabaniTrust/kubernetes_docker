@@ -1,0 +1,52 @@
+# Azure CosmosDB with multi-region configuration
+apiVersion: database.azure.crossplane.io/v1alpha1
+kind: CosmosDBAccount
+metadata:
+  name: complex-cosmosdb
+spec:
+  forProvider:
+    resourceGroupName: app-platform-rg
+    location: eastus
+    kind: MongoDB
+    consistencyPolicy:
+      defaultConsistencyLevel: Session
+      maxIntervalInSeconds: 5
+      maxStalenessPrefix: 100
+    databaseAccountOfferType: Standard
+    enableAutomaticFailover: true
+    enableMultipleWriteLocations: true
+    isVirtualNetworkFilterEnabled: true
+    virtualNetworkRules:
+      - id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/app-platform-rg/providers/Microsoft.Network/virtualNetworks/app-vnet/subnets/db-subnet
+      - id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/app-platform-rg/providers/Microsoft.Network/virtualNetworks/app-vnet/subnets/app-subnet
+    ipRangeFilter: "104.42.195.92,40.76.54.131,52.176.6.30,52.169.50.45,52.187.184.26"
+    enableFreeTier: false
+    capabilities:
+      - name: EnableAggregationPipeline
+      - name: mongoEnableDocLevelTTL
+      - name: MongoDBv3.4
+      - name: EnableMongo
+    backupPolicy:
+      type: Periodic
+      periodicModeProperties:
+        backupIntervalInMinutes: 240
+        backupRetentionIntervalInHours: 720
+    locations:
+      - locationName: eastus
+        failoverPriority: 0
+        isZoneRedundant: true
+      - locationName: westus
+        failoverPriority: 1
+        isZoneRedundant: true
+      - locationName: northeurope
+        failoverPriority: 2
+        isZoneRedundant: false
+    tags:
+      Environment: Production
+      CostCenter: "1234"
+      ApplicationOwner: "Team Finance"
+  writeConnectionSecretToRef:
+    name: complex-cosmosdb-conn
+    namespace: crossplane-system
+  providerConfigRef:
+    name: azure-provider 

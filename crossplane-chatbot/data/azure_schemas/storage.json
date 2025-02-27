@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["name", "resource_group", "location", "sku"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the storage account"
+    },
+    "resource_group": {
+      "type": "string",
+      "description": "The resource group for the storage account"
+    },
+    "location": {
+      "type": "string",
+      "description": "The Azure region for the storage account"
+    },
+    "sku": {
+      "type": "string",
+      "enum": ["Standard_LRS", "Standard_GRS", "Standard_RAGRS", "Standard_ZRS", "Premium_LRS", "Premium_ZRS"],
+      "description": "The SKU of the storage account"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["StorageV2", "Storage", "BlobStorage", "FileStorage", "BlockBlobStorage"],
+      "description": "The kind of storage account"
+    },
+    "access_tier": {
+      "type": "string",
+      "enum": ["Hot", "Cool"],
+      "description": "The access tier of the storage account"
+    },
+    "enable_https_traffic_only": {
+      "type": "string",
+      "enum": ["yes", "no"],
+      "description": "Whether to enable HTTPS traffic only"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Tags to apply to the storage account in the format 'key1=value1,key2=value2'"
+    }
+  }
+} 

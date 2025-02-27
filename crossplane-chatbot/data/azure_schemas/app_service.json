@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["name", "resource_group", "location", "app_service_plan"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the app service"
+    },
+    "resource_group": {
+      "type": "string",
+      "description": "The resource group for the app service"
+    },
+    "location": {
+      "type": "string",
+      "description": "The Azure region for the app service"
+    },
+    "app_service_plan": {
+      "type": "string",
+      "description": "The app service plan to use"
+    },
+    "runtime_stack": {
+      "type": "string",
+      "description": "The runtime stack to use"
+    },
+    "always_on": {
+      "type": "string",
+      "enum": ["yes", "no"],
+      "description": "Whether the app service should be always on"
+    },
+    "https_only": {
+      "type": "string",
+      "enum": ["yes", "no"],
+      "description": "Whether the app service should only be accessible via HTTPS"
+    },
+    "min_tls_version": {
+      "type": "string",
+      "description": "The minimum TLS version required"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Tags to apply to the app service in the format 'key1=value1,key2=value2'"
+    }
+  }
+} 

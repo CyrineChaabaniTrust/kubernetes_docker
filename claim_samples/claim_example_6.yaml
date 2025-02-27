@@ -1,0 +1,19 @@
+# AWS EC2 Instance
+apiVersion: compute.aws.crossplane.io/v1alpha1
+kind: Instance
+metadata:
+  name: example-ec2
+spec:
+  forProvider:
+    region: us-east-1
+    instanceType: t2.micro
+    imageId: ami-0c55b159cbfafe1f0
+    subnetId: subnet-0a123b456c789d01e
+    keyName: my-key-pair
+    securityGroupIds:
+      - sg-0a123b456c789d01e
+  writeConnectionSecretToRef:
+    name: example-ec2-conn
+    namespace: crossplane-system
+  providerConfigRef:
+    name: aws-provider 

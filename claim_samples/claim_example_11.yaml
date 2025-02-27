@@ -1,0 +1,17 @@
+# Azure Storage Account
+apiVersion: storage.azure.crossplane.io/v1alpha1
+kind: Account
+metadata:
+  name: example-storage
+spec:
+  forProvider:
+    location: eastus
+    resourceGroupName: example-rg
+    kind: StorageV2
+    accessTier: Hot
+    supportsHttpsTrafficOnly: true
+  writeConnectionSecretToRef:
+    name: example-storage-conn
+    namespace: crossplane-system
+  providerConfigRef:
+    name: azure-provider 

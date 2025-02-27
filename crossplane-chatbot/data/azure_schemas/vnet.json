@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["name", "resource_group", "location", "address_space"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the virtual network"
+    },
+    "resource_group": {
+      "type": "string",
+      "description": "The resource group for the virtual network"
+    },
+    "location": {
+      "type": "string",
+      "description": "The Azure region for the virtual network"
+    },
+    "address_space": {
+      "type": "string",
+      "description": "The address space for the virtual network"
+    },
+    "dns_servers": {
+      "type": "string",
+      "description": "Comma-separated list of DNS servers"
+    },
+    "subnet_name": {
+      "type": "string",
+      "description": "The name of the default subnet"
+    },
+    "subnet_prefix": {
+      "type": "string",
+      "description": "The address prefix for the default subnet"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Tags to apply to the virtual network in the format 'key1=value1,key2=value2'"
+    }
+  }
+} 

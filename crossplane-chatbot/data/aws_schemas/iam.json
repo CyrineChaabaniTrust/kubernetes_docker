@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["name", "assume_role_policy"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the IAM role"
+    },
+    "assume_role_policy": {
+      "type": "string",
+      "description": "The service that can assume this role (e.g., ec2, lambda)"
+    },
+    "managed_policies": {
+      "type": "string",
+      "description": "Comma-separated list of managed policy ARNs"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Tags to apply to the IAM role in the format 'key1=value1,key2=value2'"
+    }
+  }
+} 

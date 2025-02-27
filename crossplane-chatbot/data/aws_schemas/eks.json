@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["name", "region", "kubernetes_version", "node_group_name", "node_role", "subnet_ids"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the EKS cluster"
+    },
+    "region": {
+      "type": "string",
+      "pattern": "^[a-z]{2}-[a-z]+-[0-9]$",
+      "description": "The AWS region for the EKS cluster"
+    },
+    "kubernetes_version": {
+      "type": "string",
+      "description": "The Kubernetes version to use"
+    },
+    "node_group_name": {
+      "type": "string",
+      "description": "The name of the EKS node group"
+    },
+    "node_role": {
+      "type": "string",
+      "description": "The IAM role for the node group"
+    },
+    "subnet_ids": {
+      "type": "string",
+      "description": "Comma-separated list of subnet IDs"
+    },
+    "instance_types": {
+      "type": "string",
+      "description": "Comma-separated list of EC2 instance types"
+    },
+    "desired_size": {
+      "type": "string",
+      "pattern": "^[0-9]+$",
+      "description": "The desired number of nodes"
+    },
+    "min_size": {
+      "type": "string",
+      "pattern": "^[0-9]+$",
+      "description": "The minimum number of nodes"
+    },
+    "max_size": {
+      "type": "string",
+      "pattern": "^[0-9]+$",
+      "description": "The maximum number of nodes"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Tags to apply to the EKS cluster in the format 'key1=value1,key2=value2'"
+    }
+  }
+} 

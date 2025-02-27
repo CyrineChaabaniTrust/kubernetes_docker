@@ -1,0 +1,14 @@
+# Composite Object Storage (Cloud-Agnostic)
+apiVersion: storage.example.org/v1alpha1
+kind: CompositeObjectStorage
+metadata:
+  name: my-storage
+spec:
+  parameters:
+    region: us-east
+    sizeGB: 1000
+    encryptionEnabled: true
+    versioning: true
+    accessType: private
+  compositionRef:
+    name: standard-object-storage 

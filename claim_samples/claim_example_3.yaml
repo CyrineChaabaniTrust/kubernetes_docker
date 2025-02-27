@@ -1,0 +1,11 @@
+#Claiming a Composite PostgreSQL Instance
+apiVersion: database.example.org/v1alpha1
+kind: CompositePostgreSQLInstance
+metadata:
+  name: my-postgres
+spec:
+  parameters:
+    storage: "20Gi"
+    version: "13"
+  compositionRef:
+    name: standard-postgres-composition

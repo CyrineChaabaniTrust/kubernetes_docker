@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["name", "resource_group", "location", "kubernetes_version", "node_count", "vm_size", "dns_prefix"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the AKS cluster"
+    },
+    "resource_group": {
+      "type": "string",
+      "description": "The resource group for the AKS cluster"
+    },
+    "location": {
+      "type": "string",
+      "description": "The Azure region for the AKS cluster"
+    },
+    "kubernetes_version": {
+      "type": "string",
+      "description": "The Kubernetes version to use"
+    },
+    "node_count": {
+      "type": "string",
+      "pattern": "^[0-9]+$",
+      "description": "The number of nodes in the default node pool"
+    },
+    "vm_size": {
+      "type": "string",
+      "description": "The VM size for the nodes"
+    },
+    "dns_prefix": {
+      "type": "string",
+      "description": "The DNS prefix for the AKS cluster"
+    },
+    "network_plugin": {
+      "type": "string",
+      "enum": ["kubenet", "azure"],
+      "description": "The network plugin to use"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Tags to apply to the AKS cluster in the format 'key1=value1,key2=value2'"
+    }
+  }
+} 

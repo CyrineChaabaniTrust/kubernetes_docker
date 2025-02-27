@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["name", "region", "instance_type", "ami"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the EC2 instance"
+    },
+    "region": {
+      "type": "string",
+      "pattern": "^[a-z]{2}-[a-z]+-[0-9]$",
+      "description": "The AWS region for the EC2 instance"
+    },
+    "instance_type": {
+      "type": "string",
+      "description": "The EC2 instance type"
+    },
+    "ami": {
+      "type": "string",
+      "description": "The Amazon Machine Image ID"
+    },
+    "key_name": {
+      "type": "string",
+      "description": "The name of the key pair to use"
+    },
+    "subnet": {
+      "type": "string",
+      "description": "The subnet ID for the instance"
+    },
+    "security_groups": {
+      "type": "string",
+      "description": "Comma-separated list of security group IDs"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Tags to apply to the EC2 instance in the format 'key1=value1,key2=value2'"
+    }
+  }
+} 

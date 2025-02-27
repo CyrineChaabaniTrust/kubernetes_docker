@@ -1,0 +1,70 @@
+# AWS DynamoDB Table with Global Secondary Indexes and AutoScaling
+apiVersion: dynamodb.aws.crossplane.io/v1alpha1
+kind: Table
+metadata:
+  name: complex-dynamodb-table
+spec:
+  forProvider:
+    region: us-east-1
+    tableName: users-orders-table
+    attributeDefinitions:
+      - attributeName: UserID
+        attributeType: S
+      - attributeName: OrderID
+        attributeType: S
+      - attributeName: OrderDate
+        attributeType: S
+      - attributeName: ProductCategory
+        attributeType: S
+    keySchema:
+      - attributeName: UserID
+        keyType: HASH
+      - attributeName: OrderID
+        keyType: RANGE
+    billingMode: PROVISIONED
+    provisionedThroughput:
+      readCapacityUnits: 20
+      writeCapacityUnits: 20
+    globalSecondaryIndexes:
+      - indexName: OrderDateIndex
+        keySchema:
+          - attributeName: OrderDate
+            keyType: HASH
+          - attributeName: UserID
+            keyType: RANGE
+        projection:
+          projectionType: INCLUDE
+          nonKeyAttributes:
+            - OrderStatus
+            - TotalAmount
+        provisionedThroughput:
+          readCapacityUnits: 15
+          writeCapacityUnits: 15
+      - indexName: ProductCategoryIndex
+        keySchema:
+          - attributeName: ProductCategory
+            keyType: HASH
+          - attributeName: OrderDate
+            keyType: RANGE
+        projection:
+          projectionType: ALL
+        provisionedThroughput:
+          readCapacityUnits: 10
+          writeCapacityUnits: 10
+    pointInTimeRecovery:
+      enabled: true
+    streamSpecification:
+      streamEnabled: true
+      streamViewType: NEW_AND_OLD_IMAGES
+    sseSpecification:
+      enabled: true
+      sseType: KMS
+      kmsMasterKeyId: alias/aws/dynamodb
+    tags:
+      Environment: Production
+      CostCenter: DB123
+  writeConnectionSecretToRef:
+    name: complex-dynamodb-table-conn
+    namespace: crossplane-system
+  providerConfigRef:
+    name: aws-provider 

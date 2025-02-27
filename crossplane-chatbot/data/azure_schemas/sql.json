@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["name", "resource_group", "location", "admin_login"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the SQL server"
+    },
+    "resource_group": {
+      "type": "string",
+      "description": "The resource group for the SQL server"
+    },
+    "location": {
+      "type": "string",
+      "description": "The Azure region for the SQL server"
+    },
+    "admin_login": {
+      "type": "string",
+      "description": "The administrator login for the SQL server"
+    },
+    "admin_password": {
+      "type": "string",
+      "description": "The administrator password for the SQL server"
+    },
+    "version": {
+      "type": "string",
+      "description": "The version of the SQL server"
+    },
+    "minimal_tls_version": {
+      "type": "string",
+      "description": "The minimal TLS version to enforce"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Tags to apply to the SQL server in the format 'key1=value1,key2=value2'"
+    }
+  }
+} 

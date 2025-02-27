@@ -1,0 +1,22 @@
+{
+  "conversation_id": "0d1a453d-6464-4356-a31f-946a47004804",
+  "start_time": "2025-02-27T14:31:24.753553",
+  "current_step": "initial",
+  "cloud_provider": null,
+  "resource_type": null,
+  "collected_data": {},
+  "history": [
+    {
+      "role": "user",
+      "message": "AWS",
+      "timestamp": "2025-02-27T14:31:27.999306"
+    },
+    {
+      "role": "assistant",
+      "message": "I encountered an error. Let's start over. What cloud provider would you like to use? (AWS or Azure)",
+      "timestamp": "2025-02-27T14:31:28.017739"
+    }
+  ],
+  "error_count": 0,
+  "completed_steps": []
+}

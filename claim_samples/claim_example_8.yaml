@@ -1,0 +1,16 @@
+# GCP Storage Bucket
+apiVersion: storage.gcp.crossplane.io/v1alpha1
+kind: Bucket
+metadata:
+  name: example-gcp-bucket
+spec:
+  forProvider:
+    location: US
+    storageClass: STANDARD
+    versioning:
+      enabled: true
+  writeConnectionSecretToRef:
+    name: example-gcp-bucket-conn
+    namespace: crossplane-system
+  providerConfigRef:
+    name: gcp-provider 

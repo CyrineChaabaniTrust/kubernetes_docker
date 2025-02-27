@@ -1,0 +1,19 @@
+# Azure Kubernetes Service (AKS)
+apiVersion: compute.azure.crossplane.io/v1alpha1
+kind: AKSCluster
+metadata:
+  name: example-aks
+spec:
+  forProvider:
+    location: eastus
+    resourceGroupName: example-rg
+    kubernetesVersion: "1.22.6"
+    defaultNodePool:
+      name: default
+      nodeCount: 2
+      vmSize: Standard_DS2_v2
+  writeConnectionSecretToRef:
+    name: example-aks-conn
+    namespace: crossplane-system
+  providerConfigRef:
+    name: azure-provider 

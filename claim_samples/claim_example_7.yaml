@@ -1,0 +1,21 @@
+# GCP Cloud SQL Instance
+apiVersion: database.gcp.crossplane.io/v1beta1
+kind: CloudSQLInstance
+metadata:
+  name: example-cloudsql
+spec:
+  forProvider:
+    databaseVersion: POSTGRES_12
+    region: us-central1
+    settings:
+      tier: db-custom-1-3840
+      dataDiskSizeGb: 20
+      ipConfiguration:
+        ipv4Enabled: true
+        authorizedNetworks:
+          - value: "0.0.0.0/0"
+  writeConnectionSecretToRef:
+    name: example-cloudsql-conn
+    namespace: crossplane-system
+  providerConfigRef:
+    name: gcp-provider 

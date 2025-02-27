@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crossplane Chatbot</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/yaml.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/default.min.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Crossplane YAML Manifest Generator</h1>
+        </div>
+        
+        <div class="main-content">
+            <div class="chat-container">
+                <div class="chat-header">
+                    <h2>Chat</h2>
+                </div>
+                <div class="chat-messages" id="chat-messages"></div>
+                <div class="chat-input">
+                    <input type="text" id="message-input" placeholder="Type your message...">
+                    <button id="send-button">Send</button>
+                </div>
+                <div class="chat-commands">
+                    <button class="command-btn" data-command="undo">Undo</button>
+                    <button class="command-btn" data-command="restart">Restart</button>
+                    <button class="command-btn" data-command="help">Help</button>
+                </div>
+            </div>
+            
+            <div class="state-panel">
+                <div class="state-section">
+                    <h2>Conversation State</h2>
+                    <div class="state-info">
+                        <div class="state-item">
+                            <span class="state-label">Current Step:</span>
+                            <span class="state-value" id="current-step">Initial</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">Cloud Provider:</span>
+                            <span class="state-value" id="cloud-provider">None</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">Resource Type:</span>
+                            <span class="state-value" id="resource-type">None</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">Completed Steps:</span>
+                            <div class="state-value state-list" id="completed-steps"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="state-section">
+                    <h2>Collected Data</h2>
+                    <div class="state-info" id="collected-data">
+                        <p class="empty-state">No data collected yet</p>
+                    </div>
+                </div>
+                
+                <div class="state-section yaml-output">
+                    <h2>Generated YAML</h2>
+                    <pre class="yaml-container"><code class="language-yaml" id="yaml-output">No YAML generated yet</code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

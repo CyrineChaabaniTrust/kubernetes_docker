@@ -1,0 +1,81 @@
+# AWS API Gateway with Lambda Integration
+apiVersion: apigateway.aws.crossplane.io/v1alpha1
+kind: RestAPI
+metadata:
+  name: complex-api-gateway
+spec:
+  forProvider:
+    region: us-east-1
+    name: product-api
+    description: "Product API with Lambda Integration"
+    endpointConfiguration:
+      types:
+        - REGIONAL
+    binaryMediaTypes:
+      - "image/png"
+      - "application/octet-stream"
+    minimumCompressionSize: 1024
+    resources:
+      - pathPart: "products"
+        parentId: "root"
+        methods:
+          - httpMethod: GET
+            operationName: GetProducts
+            authorizationType: NONE
+            apiKeyRequired: false
+            integration:
+              type: AWS_PROXY
+              integrationHttpMethod: POST
+              uri: arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:123456789012:function:getProducts/invocations
+              passthroughBehavior: WHEN_NO_MATCH
+              contentHandling: CONVERT_TO_TEXT
+          - httpMethod: POST
+            operationName: CreateProduct
+            authorizationType: COGNITO_USER_POOLS
+            authorizerId: abcdef1234
+            apiKeyRequired: true
+            requestParameters:
+              method.request.header.Content-Type: true
+            integration:
+              type: AWS_PROXY
+              integrationHttpMethod: POST
+              uri: arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:123456789012:function:createProduct/invocations
+              passthroughBehavior: NEVER
+              contentHandling: CONVERT_TO_JSON
+        resources:
+          - pathPart: "{productId}"
+            methods:
+              - httpMethod: GET
+                operationName: GetProductById
+                authorizationType: NONE
+                requestParameters:
+                  method.request.path.productId: true
+                integration:
+                  type: AWS_PROXY
+                  integrationHttpMethod: POST
+                  uri: arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:123456789012:function:getProductById/invocations
+              - httpMethod: DELETE
+                operationName: DeleteProduct
+                authorizationType: AWS_IAM
+                integration:
+                  type: AWS_PROXY
+                  integrationHttpMethod: POST
+                  uri: arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:123456789012:function:deleteProduct/invocations
+    deployments:
+      - stageName: "prod"
+        stageDescription: "Production Stage"
+        description: "Production Deployment"
+        cacheClusterEnabled: true
+        cacheClusterSize: "0.5"
+        variables:
+          environment: production
+          loggingLevel: INFO
+    apiKeySourceType: HEADER
+    tags:
+      Environment: Production
+      Service: ProductAPI
+  writeConnectionSecretToRef:
+    name: complex-api-gateway-conn
+    namespace: crossplane-system
+  providerConfigRef:
+    name: aws-provider 

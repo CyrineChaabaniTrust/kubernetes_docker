@@ -1,0 +1,43 @@
+# AWS ECS Fargate Service with Load Balancer
+apiVersion: ecs.aws.crossplane.io/v1alpha1
+kind: FargateService
+metadata:
+  name: complex-fargate-service
+spec:
+  forProvider:
+    region: us-west-2
+    clusterName: production-cluster
+    desiredCount: 3
+    networkConfiguration:
+      awsvpcConfiguration:
+        subnets:
+          - subnet-0a1b2c3d4e5f6g7h8
+          - subnet-1a2b3c4d5e6f7g8h9
+        securityGroups:
+          - sg-0a1b2c3d4e5f6g7h8
+        assignPublicIp: ENABLED
+    loadBalancers:
+      - targetGroupArn: arn:aws:elasticloadbalancing:us-west-2:123456789012:targetgroup/ecs-target/abcdef1234567890
+        containerName: web-app
+        containerPort: 80
+    taskDefinition: arn:aws:ecs:us-west-2:123456789012:task-definition/web-app:1
+    platformVersion: "1.4.0"
+    deploymentConfiguration:
+      minimumHealthyPercent: 75
+      maximumPercent: 200
+    capacityProviderStrategy:
+      - capacityProvider: FARGATE_SPOT
+        weight: 1
+        base: 1
+      - capacityProvider: FARGATE
+        weight: 2
+    enableECSManagedTags: true
+    propagateTags: SERVICE
+    tags:
+      Environment: Production
+      Application: WebApp
+  writeConnectionSecretToRef:
+    name: complex-fargate-service-conn
+    namespace: crossplane-system
+  providerConfigRef:
+    name: aws-provider 

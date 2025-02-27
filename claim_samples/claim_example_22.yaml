@@ -1,0 +1,136 @@
+# Azure App Service with deployment slots, auto-scaling, and advanced monitoring
+apiVersion: web.azure.crossplane.io/v1alpha1
+kind: AppService
+metadata:
+  name: complex-webapp
+spec:
+  forProvider:
+    resourceGroupName: webapps-rg
+    location: westeurope
+    appServicePlanId: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/webapps-rg/providers/Microsoft.Web/serverfarms/premium-asp
+    httpsOnly: true
+    enabled: true
+    clientCertEnabled: true
+    clientCertMode: Required
+    hostNameSslStates:
+      - name: app.example.com
+        sslState: SniEnabled
+        hostType: Standard
+    identity:
+      type: SystemAssigned, UserAssigned
+      userAssignedIdentities:
+        /subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/webapps-rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/web-identity: {}
+    siteConfig:
+      alwaysOn: true
+      http20Enabled: true
+      ftpsState: FtpsOnly
+      minTlsVersion: 1.2
+      phpVersion: "7.4"
+      netFrameworkVersion: v5.0
+      numberOfWorkers: 4
+      webSocketsEnabled: true
+      linuxFxVersion: "DOCKER|myacr.azurecr.io/webapp:latest"
+      appSettings:
+        - name: DOCKER_REGISTRY_SERVER_URL
+          value: https://myacr.azurecr.io
+        - name: DOCKER_REGISTRY_SERVER_USERNAME
+          value: myacr
+        - name: APPLICATIONINSIGHTS_CONNECTION_STRING
+          value: InstrumentationKey=00000000-0000-0000-0000-000000000000
+        - name: KeyVaultUrl
+          value: https://myvault.vault.azure.net/
+        - name: ENVIRONMENT
+          value: Production
+      connectionStrings:
+        - name: Database
+          type: SQLAzure
+          connectionString: Server=tcp:myserver.database.windows.net,1433;Database=mydb;
+      cors:
+        allowedOrigins:
+          - https://example.com
+          - https://www.example.com
+      ipSecurityRestrictions:
+        - ipAddress: 40.74.28.0/23
+          name: AllowCorporateNetwork
+          priority: 100
+          action: Allow
+        - ipAddress: 203.0.113.0/24
+          name: AllowPartnerNetwork
+          priority: 200
+          action: Allow
+    deploymentSlots:
+      - name: staging
+        configuration:
+          alwaysOn: true
+          appSettings:
+            - name: ENVIRONMENT
+              value: Staging
+      - name: testing
+        configuration:
+          appSettings:
+            - name: ENVIRONMENT
+              value: Testing
+    autoscaleProfile:
+      name: DefaultProfile
+      capacity:
+        minimum: 2
+        maximum: 10
+        default: 4
+      rules:
+        - metricTrigger:
+            metricName: CpuPercentage
+            metricResourceUri: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/webapps-rg/providers/Microsoft.Web/serverfarms/premium-asp
+            timeGrain: PT1M
+            statistic: Average
+            timeWindow: PT10M
+            timeAggregation: Average
+            operator: GreaterThan
+            threshold: 70
+          scaleAction:
+            direction: Increase
+            type: ChangeCount
+            value: 1
+            cooldown: PT10M
+        - metricTrigger:
+            metricName: CpuPercentage
+            metricResourceUri: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/webapps-rg/providers/Microsoft.Web/serverfarms/premium-asp
+            timeGrain: PT1M
+            statistic: Average
+            timeWindow: PT10M
+            timeAggregation: Average
+            operator: LessThan
+            threshold: 30
+          scaleAction:
+            direction: Decrease
+            type: ChangeCount
+            value: 1
+            cooldown: PT10M
+    diagnosticSettings:
+      - name: appServiceLogs
+        storageAccountId: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/webapps-rg/providers/Microsoft.Storage/storageAccounts/diagstorage
+        logAnalyticsWorkspaceId: /subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/webapps-rg/providers/Microsoft.OperationalInsights/workspaces/app-workspace
+        logs:
+          - category: AppServiceHTTPLogs
+            enabled: true
+            retentionPolicy:
+              days: 30
+              enabled: true
+          - category: AppServiceConsoleLogs
+            enabled: true
+          - category: AppServiceAppLogs
+            enabled: true
+        metrics:
+          - category: AllMetrics
+            enabled: true
+            retentionPolicy:
+              days: 30
+              enabled: true
+    tags:
+      Environment: Production
+      CostCenter: Marketing
+      Tier: Frontend
+  writeConnectionSecretToRef:
+    name: complex-webapp-conn
+    namespace: crossplane-system
+  providerConfigRef:
+    name: azure-provider 

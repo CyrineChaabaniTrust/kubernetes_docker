@@ -1,0 +1,15 @@
+# AWS S3 Bucket
+apiVersion: storage.aws.crossplane.io/v1alpha1
+kind: Bucket
+metadata:
+  name: example-bucket
+spec:
+  forProvider:
+    acl: private
+    locationConstraint: us-west-2
+    versioning: true
+  writeConnectionSecretToRef:
+    name: example-bucket-conn
+    namespace: crossplane-system
+  providerConfigRef:
+    name: aws-provider 

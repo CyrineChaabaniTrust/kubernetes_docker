@@ -1,0 +1,13 @@
+# Composite MySQL Database (Cloud-Agnostic)
+apiVersion: database.example.org/v1alpha1
+kind: CompositeMySQLInstance
+metadata:
+  name: my-mysql
+spec:
+  parameters:
+    storageGB: 50
+    version: "8.0"
+    tier: production
+    backupRetentionDays: 7
+  compositionRef:
+    name: production-mysql 

@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["bucket_name", "region", "acl"],
+  "properties": {
+    "bucket_name": {
+      "type": "string",
+      "pattern": "^[a-z0-9.-]{3,63}$",
+      "description": "The name of the S3 bucket"
+    },
+    "region": {
+      "type": "string",
+      "pattern": "^[a-z]{2}-[a-z]+-[0-9]$",
+      "description": "The AWS region for the bucket"
+    },
+    "acl": {
+      "type": "string",
+      "enum": ["private", "public-read", "public-read-write", "authenticated-read", "bucket-owner-read", "bucket-owner-full-control"],
+      "description": "The access control list for the bucket"
+    },
+    "versioning": {
+      "type": "string",
+      "enum": ["yes", "no"],
+      "description": "Whether to enable versioning for the bucket"
+    },
+    "encryption": {
+      "type": "string",
+      "enum": ["yes", "no"],
+      "description": "Whether to enable server-side encryption for the bucket"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Tags to apply to the bucket in the format 'key1=value1,key2=value2'"
+    }
+  }
+} 

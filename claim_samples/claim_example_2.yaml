@@ -1,0 +1,16 @@
+#Claiming a Google Cloud GKE Cluster
+apiVersion: container.gcp.crossplane.io/v1beta1
+kind: GKECluster
+metadata:
+  name: example-gke
+spec:
+  forProvider:
+    initialClusterVersion: "1.20"
+    location: us-central1-a
+    network: default
+    subnetwork: default
+  writeConnectionSecretToRef:
+    name: example-gke-conn
+    namespace: crossplane-system
+  providerConfigRef:
+    name: gcp-provider

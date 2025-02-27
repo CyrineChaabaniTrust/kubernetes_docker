@@ -1,0 +1,17 @@
+# Alibaba Cloud ECS Instance
+apiVersion: compute.alibaba.crossplane.io/v1alpha1
+kind: ECSInstance
+metadata:
+  name: example-ecs
+spec:
+  forProvider:
+    region: cn-hangzhou
+    instanceType: ecs.t5-lc1m1.small
+    imageId: ubuntu_18_04_64_20G_alibase_20190624.vhd
+    internetChargeType: PayByTraffic
+    internetMaxBandwidthOut: 5
+  writeConnectionSecretToRef:
+    name: example-ecs-conn
+    namespace: crossplane-system
+  providerConfigRef:
+    name: alibaba-provider 

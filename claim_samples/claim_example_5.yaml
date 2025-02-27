@@ -1,0 +1,21 @@
+# AWS EKS Cluster
+apiVersion: container.aws.crossplane.io/v1alpha1
+kind: EKSCluster
+metadata:
+  name: example-eks
+spec:
+  forProvider:
+    region: us-east-1
+    version: "1.23"
+    roleArn: arn:aws:iam::123456789012:role/eks-cluster-role
+    resourcesVpcConfig:
+      subnetIds:
+        - subnet-0a123b456c789d01e
+        - subnet-0a123b456c789d01f
+      securityGroupIds:
+        - sg-0a123b456c789d01e
+  writeConnectionSecretToRef:
+    name: example-eks-conn
+    namespace: crossplane-system
+  providerConfigRef:
+    name: aws-provider 

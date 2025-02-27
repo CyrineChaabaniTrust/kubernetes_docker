@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["name", "resource_group", "location", "api"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the Cosmos DB account"
+    },
+    "resource_group": {
+      "type": "string",
+      "description": "The resource group for the Cosmos DB account"
+    },
+    "location": {
+      "type": "string",
+      "description": "The Azure region for the Cosmos DB account"
+    },
+    "api": {
+      "type": "string",
+      "enum": ["SQL", "MongoDB", "Cassandra", "Gremlin", "Table"],
+      "description": "The API type to use"
+    },
+    "consistency_level": {
+      "type": "string",
+      "enum": ["Strong", "BoundedStaleness", "Session", "ConsistentPrefix", "Eventual"],
+      "description": "The consistency level"
+    },
+    "multi_region_write": {
+      "type": "string",
+      "enum": ["yes", "no"],
+      "description": "Whether to enable multi-region writes"
+    },
+    "backup_policy": {
+      "type": "string",
+      "enum": ["Periodic", "Continuous"],
+      "description": "The backup policy"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Tags to apply to the Cosmos DB account in the format 'key1=value1,key2=value2'"
+    }
+  }
+} 
