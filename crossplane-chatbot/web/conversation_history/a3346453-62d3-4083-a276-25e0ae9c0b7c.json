@@ -1,6 +1,6 @@
 {
   "conversation_id": "a3346453-62d3-4083-a276-25e0ae9c0b7c",
-  "start_time": "2025-02-27T11:21:29.351243",
+  "start_time": "2025-02-27T15:43:23.070278",
   "current_step": "initial",
   "cloud_provider": null,
   "resource_type": null,
@@ -8,13 +8,13 @@
   "history": [
     {
       "role": "user",
-      "message": "I need a claim for azure",
-      "timestamp": "2025-02-27T11:23:40.865415"
+      "message": "azure",
+      "timestamp": "2025-02-27T15:43:26.577611"
     },
     {
       "role": "assistant",
-      "message": "I'm here to help you create Crossplane resources. Which cloud provider would you like to use? (AWS or Azure)",
-      "timestamp": "2025-02-27T11:23:47.072910"
+      "message": "I encountered an error. Let's start over. What cloud provider would you like to use? (AWS or Azure)",
+      "timestamp": "2025-02-27T15:43:26.598285"
     }
   ],
   "error_count": 0,

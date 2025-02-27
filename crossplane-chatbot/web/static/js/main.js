@@ -1,5 +1,3 @@
-const socket = io();
-
 const chatMessages = document.getElementById('chat-messages');
 const messageInput = document.getElementById('message-input');
 const sendButton = document.getElementById('send-button');
@@ -12,6 +10,8 @@ const completedStepsEl = document.getElementById('completed-steps');
 const collectedDataEl = document.getElementById('collected-data');
 const yamlOutputEl = document.getElementById('yaml-output');
 
+document.addEventListener('DOMContentLoaded', initializeConversation);
+
 function createMessageElement(message) {
     const messageEl = document.createElement('div');
     messageEl.classList.add('message', message.role);
@@ -20,7 +20,6 @@ function createMessageElement(message) {
         const parts = message.content.split(/```(?:yaml)?/);
         for (let i = 0; i < parts.length; i++) {
             if (i % 2 === 0) {
-                // Regular text
                 const textNode = document.createElement('div');
                 textNode.textContent = parts[i].trim();
                 if (textNode.textContent) {
@@ -44,71 +43,134 @@ function createMessageElement(message) {
     return messageEl;
 }
 
-function sendMessage() {
-    const message = messageInput.value.trim();
-    if (message) {
-        socket.emit('message', { message });
-        messageInput.value = '';
-    }
-}
-
-sendButton.addEventListener('click', sendMessage);
-messageInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-        sendMessage();
-    }
-});
-
-commandButtons.forEach(button => {
-    button.addEventListener('click', () => {
-        const command = button.dataset.command;
-        if (command === 'help') {
-            displayHelpMessage();
-        } else {
-            socket.emit('message', { message: command });
+async function initializeConversation() {
+    try {
+        const response = await fetch('/api/initialize', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            showError(data.error);
+            return;
         }
-    });
-});
-
-function displayHelpMessage() {
-    const helpMessage = {
-        role: 'assistant',
-        content: `
-            Available commands:
-            - undo: Undo the last step
-            - restart: Start a new conversation
-            - help: Show this help message
-            
-            Tips:
-            - Be specific about the cloud provider and resource type you want to create
-            - Your conversation state is shown on the right panel
-            - Generated YAML will appear in the bottom right panel
-        `
-    };
-    
-    chatMessages.appendChild(createMessageElement(helpMessage));
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+        
+        if (data.messages) {
+            chatMessages.innerHTML = '';
+            data.messages.forEach(message => {
+                chatMessages.appendChild(createMessageElement(message));
+            });
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        } else if (data.message) {
+            chatMessages.innerHTML = '';
+            chatMessages.appendChild(createMessageElement({
+                role: 'assistant',
+                content: data.message
+            }));
+        }
+        
+        updateStateDisplay(data.state);
+    } catch (error) {
+        showError('Failed to initialize conversation: ' + error.message);
+    }
 }
 
-socket.on('connect', () => {
-    console.log('Connected to server');
-});
+async function sendMessage() {
+    const message = messageInput.value.trim();
+    if (!message) return;
+    
+    messageInput.value = '';
+    
 
-socket.on('message', (message) => {
-    chatMessages.appendChild(createMessageElement(message));
+    chatMessages.appendChild(createMessageElement({
+        role: 'user',
+        content: message
+    }));
     chatMessages.scrollTop = chatMessages.scrollHeight;
-});
+    
+    try {
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ message })
+        });
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            showError(data.error);
+            return;
+        }
+        
+        if (data.message) {
+            chatMessages.appendChild(createMessageElement({
+                role: 'assistant',
+                content: data.message
+            }));
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        if (data.state) {
+            updateStateDisplay(data.state);
+        }
+        
+        if (data.manifest) {
+            yamlOutputEl.textContent = data.manifest;
+            hljs.highlightElement(yamlOutputEl);
+        }
+    } catch (error) {
+        showError('Failed to send message: ' + error.message);
+    }
+}
 
-socket.on('error', (data) => {
-    const errorMessage = {
-        role: 'assistant',
-        content: `Error: ${data.message}`
-    };
-    chatMessages.appendChild(createMessageElement(errorMessage));
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-});
+async function resetConversation() {
+    try {
+        const response = await fetch('/api/reset', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            showError(data.error);
+            return;
+        }
+        
+        chatMessages.innerHTML = '';
+        if (data.messages) {
+            data.messages.forEach(message => {
+                chatMessages.appendChild(createMessageElement(message));
+            });
+        } else if (data.message) {
+            chatMessages.appendChild(createMessageElement({
+                role: 'assistant',
+                content: data.message
+            }));
+        }
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        
+        if (data.state) {
+            updateStateDisplay(data.state);
+        }
+        
+        yamlOutputEl.textContent = '';
+    } catch (error) {
+        showError('Failed to reset conversation: ' + error.message);
+    }
+}
 
-socket.on('state_update', (state) => {
+function updateStateDisplay(state) {
+    if (!state) return;
+    
     currentStepEl.textContent = formatStateLabel(state.current_step || 'initial');
     cloudProviderEl.textContent = state.cloud_provider || 'None';
     resourceTypeEl.textContent = state.resource_type || 'None';
@@ -149,17 +211,60 @@ socket.on('state_update', (state) => {
         emptyEl.textContent = 'No data collected yet';
         collectedDataEl.appendChild(emptyEl);
     }
-});
+}
 
-socket.on('yaml_manifest', (data) => {
-    yamlOutputEl.textContent = data.content;
-    hljs.highlightElement(yamlOutputEl);
-});
+function showError(errorMessage) {
+    chatMessages.appendChild(createMessageElement({
+        role: 'assistant',
+        content: `Error: ${errorMessage}`
+    }));
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function displayHelpMessage() {
+    const helpMessage = {
+        role: 'assistant',
+        content: `
+            Available commands:
+            - undo: Undo the last step
+            - restart: Start a new conversation
+            - help: Show this help message
+            
+            Tips:
+            - Be specific about the cloud provider and resource type you want to create
+            - Your conversation state is shown on the right panel
+            - Generated YAML will appear in the bottom right panel
+        `
+    };
+    
+    chatMessages.appendChild(createMessageElement(helpMessage));
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
 
 function formatStateLabel(label) {
     return label
         .replace(/_/g, ' ')
         .replace(/\b\w/g, l => l.toUpperCase());
 }
+
+sendButton.addEventListener('click', sendMessage);
+messageInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        sendMessage();
+    }
+});
+
+commandButtons.forEach(button => {
+    button.addEventListener('click', () => {
+        const command = button.dataset.command;
+        if (command === 'help') {
+            displayHelpMessage();
+        } else if (command === 'restart') {
+            resetConversation();
+        } else {
+            sendMessage({ message: command });
+        }
+    });
+});
 
 hljs.highlightAll();
