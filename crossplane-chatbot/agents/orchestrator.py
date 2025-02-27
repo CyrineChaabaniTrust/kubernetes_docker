@@ -239,7 +239,7 @@ class OrchestratorAgent:
                 "message": "I'm having trouble understanding which cloud provider you want to use. Could you please clearly state if you want to use AWS or Azure?"
             }
     
-    def _get_current_state_tool(self, params: EmptySchema) -> dict:
+    def _get_current_state_tool(self) -> dict:
         """Tool to get the current state of the conversation workflow"""
         current_step = self.state.state.get("current_step", "initial")
         cloud_provider = self.state.state.get("cloud_provider")
@@ -254,7 +254,7 @@ class OrchestratorAgent:
             "message": f"Current step: {current_step}, Cloud provider: {cloud_provider}, Resource type: {resource_type}, Collected data fields: {list(collected_data.keys()) if collected_data else 'None'}"
         }
     
-    def _reset_conversation_tool(self, params: EmptySchema) -> dict:
+    def _reset_conversation_tool(self) -> dict:
         """Tool to reset the conversation to start over with a new resource"""
         self.state = ConversationState(conversation_id=self.state.conversation_id)
         
