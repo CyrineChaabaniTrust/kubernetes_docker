@@ -7,7 +7,7 @@ A chatbot to help users generate Crossplane YAML manifests for different cloud p
 1. Clone the repository:
 
 ```bash
-git clone [https://github.com/crossplane/crossplane-chatbot.git](https://github.com/CyrineChaabaniTrust/kubernetes_docker.git)
+git clone https://github.com/CyrineChaabaniTrust/kubernetes_docker.git
 cd kubernetes_docker/crossplane-chatbot
 ```
 
