@@ -9,6 +9,8 @@ import json
 import re
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
+from langchain.agents.format_scratchpad import format_to_openai_function_messages
+from langchain.agents.output_parsers import OpenAIFunctionsAgentOutputParser
 
 from .s3_agent import AWSS3Agent
 from .rds_agent import AWSRDSAgent
@@ -48,6 +50,38 @@ class AWSAgent:
             memory_key="chat_history",
             return_messages=True
         )
+        
+        # Add intent detection prompt
+        self.intent_detection_prompt = PromptTemplate(
+            input_variables=["user_input", "current_step", "resource_type", "collected_fields"],
+            template="""
+            Analyze the user's message and determine if they are:
+            1. Asking a general question about AWS, Crossplane, {resource_type}, or infrastructure concepts
+            2. Providing information for the current step ({current_step}) related to {resource_type}
+            
+            Current collected fields: {collected_fields}
+            
+            User message: "{user_input}"
+            
+            Return only one of these values:
+            - "question" if they're asking a general question
+            - "input" if they're providing information for the current step
+            """)
+        
+        # Add QA prompt
+        self.qa_prompt = PromptTemplate(
+            input_variables=["question", "resource_type", "current_step"],
+            template="""
+            You are a helpful assistant with expertise in AWS cloud infrastructure, Kubernetes, and Crossplane.
+            The user is currently in the process of creating an AWS {resource_type} resource and is at the step: {current_step}.
+            
+            Answer the following question clearly and concisely:
+            
+            {question}
+            
+            Provide a helpful, informative answer in 2-3 sentences. After answering, remind the user we 
+            can continue with the {resource_type} creation process.
+            """)
         
         self.resource_type_prompt = PromptTemplate(
             input_variables=["user_input", "previous_attempts"],
@@ -107,13 +141,6 @@ class AWSAgent:
                 return_direct=False
             ),
             StructuredTool.from_function(
-                name="start_resource_data_collection",
-                description="Starts collecting data for a specific resource type",
-                func=self._start_resource_data_collection_tool,
-                args_schema=ResourceDataSchema,
-                return_direct=False
-            ),
-            StructuredTool.from_function(
                 name="collect_resource_data",
                 description="Collects required data for the resource being created",
                 func=self._collect_resource_data_tool,
@@ -141,13 +168,15 @@ class AWSAgent:
         system_message_prompt = SystemMessagePromptTemplate.from_template(
             """You are an AWS infrastructure specialist helping create Crossplane manifests.
             
-            Your role is to identify which AWS resource the user wants to create and collect the necessary information.
+            Your role is to identify which AWS resource the user wants to create and collect the necessary information about it.
             
             You have access to the following tools: {tools}
             
             The available tools are: {tool_names}
             
             Always use the most appropriate tool for the job.
+
+            This is what you have collected so far: {collected_data}
             """
         )
         
@@ -160,8 +189,59 @@ class AWSAgent:
             MessagesPlaceholder(variable_name="agent_scratchpad")
         ])
         
+        def create_structured_chat_agent_updated(llm, tools, prompt):
+            tool_descriptions = []
+            tool_names = [tool.name for tool in tools]
+            
+            for tool in tools:
+                if hasattr(tool, "args_schema"):
+                    schema = tool.args_schema.schema()
+                    parameters = {
+                        "type": "object",
+                        "properties": schema.get("properties", {}),
+                        "required": schema.get("required", []),
+                        "additionalProperties": False
+                    }
+                else:
+                    parameters = {
+                        "type": "object", 
+                        "properties": {},
+                        "additionalProperties": False
+                    }
+                
+                function_def = {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": parameters
+                }
+                
+                tool_descriptions.append(function_def)
+            
+            tool_strings = []
+            for tool in tools:
+                tool_strings.append(f"{tool.name}: {tool.description}")
+            tools_string = "\n".join(tool_strings)
+
+            collected_data = self.state.state.get("collected_data", {})
+            
+            agent = (
+                {
+                    "input": lambda x: x["input"],
+                    "chat_history": lambda x: x.get("chat_history", []),
+                    "agent_scratchpad": lambda x: format_to_openai_function_messages(x.get("intermediate_steps", [])),
+                    "tools": lambda x: tools_string,
+                    "tool_names": lambda x: ", ".join(tool_names),
+                    "collected_data": lambda x: x.get("collected_data", {})
+                }
+                | prompt
+                | llm.bind(functions=tool_descriptions)
+                | OpenAIFunctionsAgentOutputParser()
+            )
+            
+            return agent
+
         self.agent_executor = AgentExecutor(
-            agent=create_structured_chat_agent(
+            agent=create_structured_chat_agent_updated(
                 llm=self.llm,
                 tools=tools,
                 prompt=chat_prompt
@@ -174,9 +254,52 @@ class AWSAgent:
             handle_parsing_errors=True
         )
     
-    def _determine_resource_type_tool(self, params: UserInputSchema) -> dict:
+    def _is_general_question(self, user_input: str) -> bool:
+        """Determine if user input is a general question rather than providing data"""
+        current_step = "unknown"
+        resource_type = "unknown"
+        collected_fields = []
+        
+        if self.state:
+            current_step = self.state.state.get("current_step", "unknown")
+            resource_type = self.state.state.get("resource_type", "unknown") or self.current_resource or "unknown"
+            collected_data = self.state.state.get("collected_data", {})
+            collected_fields = list(collected_data.keys()) if collected_data else []
+        
+        response = self.llm.invoke(
+            self.intent_detection_prompt.format(
+                user_input=user_input,
+                current_step=current_step,
+                resource_type=resource_type,
+                collected_fields=", ".join(collected_fields) if collected_fields else "none"
+            )
+        )
+        print(response)
+        
+        return response == "question"
+    
+    def _answer_general_question(self, question: str) -> str:
+        """Provide an answer to a general question about AWS or Crossplane"""
+        current_step = "unknown"
+        resource_type = "unknown"
+        
+        if self.state:
+            current_step = self.state.state.get("current_step", "unknown")
+            resource_type = self.state.state.get("resource_type", "unknown") or self.current_resource or "unknown"
+        
+        response = self.llm.invoke(
+            self.qa_prompt.format(
+                question=question,
+                resource_type=resource_type,
+                current_step=current_step
+            )
+        )
+        
+        return response
+    
+    def _determine_resource_type_tool(self, user_input: str) -> dict:
         """Tool to determine which AWS resource type the user wants to create"""
-        user_input = params.user_input
+
         previous_attempts = self.state.state.get("previous_attempts", []) if self.state else []
         
         try:
@@ -185,7 +308,6 @@ class AWSAgent:
                 "user_input": user_input,
                 "previous_attempts": json.dumps(previous_attempts)
             })
-            
             match = re.search(r'\{.*\}', response["text"], re.DOTALL)
             if match:
                 resource_json = match.group(0)
@@ -196,7 +318,7 @@ class AWSAgent:
                     logger.warning(f"Could not parse resource type JSON: {resource_json}")
                     resource_type = "unknown"
             else:
-                resource_type = response["text"].strip().lower()
+                resource_type = response["output"].lower()
                 if resource_type not in ["s3", "rds", "eks", "ec2", "iam", "unknown"]:
                     resource_type = "unknown"
             
@@ -205,7 +327,7 @@ class AWSAgent:
                 response = unknown_chain.invoke({"user_input": user_input})
                 return {
                     "resource_type": "unknown",
-                    "message": response["text"].strip()
+                    "message": response["output"]
                 }
             
             if resource_type in ["s3", "rds", "eks", "ec2", "iam"]:
@@ -235,15 +357,13 @@ class AWSAgent:
                 "message": "I encountered an error trying to determine which AWS resource you want to create. Could you please clearly specify one of: S3, RDS, EKS, EC2, or IAM?"
             }
     
-    def _start_resource_data_collection_tool(self, params: ResourceDataSchema) -> dict:
+    def _start_resource_data_collection_tool(self, user_input: str, resource_type: str) -> dict:
         """Tool to start collecting data for a specific resource type"""
-        resource_type = params.resource_type
         if not resource_type:
-            result = self._determine_resource_type_tool(UserInputSchema(user_input=params.user_input))
-            resource_type = result.get("resource_type")
-            
-            if resource_type == "unknown":
-                return result
+            return {
+                "error": "Invalid resource type",
+                "message": "It seems like you haven't selected a resource type yet. Please select one of the following: S3, RDS, EKS, EC2, or IAM."
+            }
         
         if resource_type not in self.resource_agents:
             return {
@@ -261,34 +381,60 @@ class AWSAgent:
         
         resource_agent = self.resource_agents.get(resource_type)
         first_question = resource_agent.get_first_question() if resource_agent else f"Let's collect information for your {resource_type}. What would you like to name it?"
-        
+        print(self.state.state)
         return {
             "resource_type": resource_type,
             "message": first_question
         }
         
-    def _collect_resource_data_tool(self, params: UserInputSchema) -> dict:
+    def _collect_resource_data_tool(self, user_input: str, resource_type: str = None) -> dict:
         """Tool to collect data for the resource being created"""
-        user_input = params.user_input
+        if not resource_type:
+            if self.current_resource:
+                resource_type = self.current_resource
+            else:
+                return {
+                    "error": "Invalid resource type",
+                    "message": "It seems like you haven't selected a resource type yet. Please select one of the following: S3, RDS, EKS, EC2, or IAM."
+                }
         
-        if not self.current_resource:
-            result = self._determine_resource_type_tool(params)
-            resource_type = result.get("resource_type")
-            
-            if resource_type == "unknown":
-                return result
-                
-            return self._start_resource_data_collection_tool(ResourceDataSchema(
-                user_input=user_input,
-                resource_type=resource_type
-            ))
+        if resource_type:
+            resource_type = resource_type.lower()
+            if resource_type == 's3bucket':
+                resource_type = 's3'
+            elif resource_type == 'rdsdatabase' or resource_type == 'rdsinstance':
+                resource_type = 'rds'
+            elif resource_type == 'ekscluster':
+                resource_type = 'eks'
+            elif resource_type == 'ec2instance':
+                resource_type = 'ec2'
+            elif resource_type == 'iamrole' or resource_type == 'iampolicy':
+                resource_type = 'iam'
         
-        resource_agent = self.resource_agents.get(self.current_resource)
+        if resource_type not in self.resource_agents:
+            return {
+                "error": "Invalid resource type",
+                "message": "I don't support that AWS resource type. I can help with S3, RDS, EKS, EC2, or IAM."
+            }
+        
+        self.current_resource = resource_type
+        if self.state:
+            if self.state.state.get("current_step") != "collect_resource_data":
+                self.state.update(
+                    current_step="collect_resource_data",
+                    resource_type=resource_type
+                )
+                self.state.mark_step_complete("select_resource")
+        
+        resource_agent = self.resource_agents.get(resource_type)
         if not resource_agent:
             return {
                 "error": "Invalid resource",
-                "message": f"I'm having trouble with the {self.current_resource} agent. Let's try a different resource type."
+                "message": f"I'm having trouble with the {resource_type} agent. Let's try a different resource type."
             }
+        
+        if self.state and "collected_data" in self.state.state:
+            self.collected_data = self.state.state.get("collected_data", {})
         
         result = resource_agent.process_input(user_input)
         
@@ -315,7 +461,7 @@ class AWSAgent:
             "message": result.get("next_question", "Could you provide more information?")
         }
     
-    def _generate_manifest_tool(self, params: EmptySchema) -> dict:
+    def _generate_manifest_tool(self) -> dict:
         """Tool to generate a Crossplane manifest for the resource"""
         if not self.current_resource or not self.collected_data:
             return {
@@ -349,7 +495,7 @@ class AWSAgent:
                 "message": f"I encountered an error generating the manifest: {str(e)}. Please check the data you provided."
             }
             
-    def _get_current_state_tool(self, params: EmptySchema) -> dict:
+    def _get_current_state_tool(self) -> dict:
         """Tool to get the current state of the resource creation process"""
         if not self.state:
             return {
@@ -370,6 +516,19 @@ class AWSAgent:
     def process_message(self, message: str) -> Dict:
         """Process a user message and return a response"""
         try:
+            # First check if this is a general question
+            if self._is_general_question(message):
+                logger.info("Detected general question, providing answer")
+                answer = self._answer_general_question(message)
+                
+                # Add to conversation history but don't change state
+                self.memory.chat_memory.add_user_message(message)
+                self.memory.chat_memory.add_ai_message(answer)
+                
+                # Return formatted response
+                return {"output": answer}
+            
+            # Continue with normal flow if not a question
             response = self.agent_executor.invoke({"input": message})
             return response
         except Exception as e:

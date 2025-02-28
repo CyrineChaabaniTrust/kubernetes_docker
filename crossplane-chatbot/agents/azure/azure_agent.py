@@ -9,6 +9,8 @@ import json
 import re
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
+from langchain.agents.format_scratchpad import format_to_openai_function_messages
+from langchain.agents.output_parsers import OpenAIFunctionsAgentOutputParser
 
 from .resource_group_agent import AzureResourceGroupAgent
 from .aks_agent import AzureAKSAgent
@@ -48,6 +50,38 @@ class AzureAgent:
             memory_key="chat_history",
             return_messages=True
         )
+        
+        # Add intent detection prompt
+        self.intent_detection_prompt = PromptTemplate(
+            input_variables=["user_input", "current_step", "resource_type", "collected_fields"],
+            template="""
+            Analyze the user's message and determine if they are:
+            1. Asking a general question about Azure, Crossplane, {resource_type}, or infrastructure concepts
+            2. Providing information for the current step ({current_step}) related to {resource_type}
+            
+            Current collected fields: {collected_fields}
+            
+            User message: "{user_input}"
+            
+            Return only one of these values:
+            - "question" if they're asking a general question
+            - "input" if they're providing information for the current step
+            """)
+        
+        # Add QA prompt
+        self.qa_prompt = PromptTemplate(
+            input_variables=["question", "resource_type", "current_step"],
+            template="""
+            You are a helpful assistant with expertise in Azure cloud infrastructure, Kubernetes, and Crossplane.
+            The user is currently in the process of creating an Azure {resource_type} resource and is at the step: {current_step}.
+            
+            Answer the following question clearly and concisely:
+            
+            {question}
+            
+            Provide a helpful, informative answer in 2-3 sentences. After answering, remind the user we 
+            can continue with the {resource_type} creation process.
+            """)
         
         self.resource_type_prompt = PromptTemplate(
             input_variables=["user_input", "previous_attempts"],
@@ -136,8 +170,56 @@ class AzureAgent:
             MessagesPlaceholder(variable_name="agent_scratchpad")
         ])
         
+        def create_structured_chat_agent_updated(llm, tools, prompt):
+            tool_descriptions = []
+            tool_names = [tool.name for tool in tools]
+            
+            for tool in tools:
+                if hasattr(tool, "args_schema"):
+                    schema = tool.args_schema.schema()
+                    parameters = {
+                        "type": "object",
+                        "properties": schema.get("properties", {}),
+                        "required": schema.get("required", []),
+                        "additionalProperties": False
+                    }
+                else:
+                    parameters = {
+                        "type": "object", 
+                        "properties": {},
+                        "additionalProperties": False
+                    }
+                
+                function_def = {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": parameters
+                }
+                
+                tool_descriptions.append(function_def)
+            
+            tool_strings = []
+            for tool in tools:
+                tool_strings.append(f"{tool.name}: {tool.description}")
+            tools_string = "\n".join(tool_strings)
+            
+            agent = (
+                {
+                    "input": lambda x: x["input"],
+                    "chat_history": lambda x: x.get("chat_history", []),
+                    "agent_scratchpad": lambda x: format_to_openai_function_messages(x.get("intermediate_steps", [])),
+                    "tools": lambda x: tools_string,
+                    "tool_names": lambda x: ", ".join(tool_names)
+                }
+                | prompt
+                | llm.bind(functions=tool_descriptions)
+                | OpenAIFunctionsAgentOutputParser()
+            )
+            
+            return agent
+
         self.agent_executor = AgentExecutor(
-            agent=create_structured_chat_agent(
+            agent=create_structured_chat_agent_updated(
                 llm=self.llm,
                 tools=tools,
                 prompt=chat_prompt
@@ -165,21 +247,21 @@ class AzureAgent:
                     previous_attempts=""
                 )
             )
-            
+            print(response)
             try:
                 result = json.loads(response)
-                resource_type = result.get("resource_type", "unknown").lower().strip()
+                resource_type = result.get("resource_type", "unknown")
             except json.JSONDecodeError:
                 resource_type = "unknown"
-                if "resource_group" in response.lower():
+                if "resource_group" in response:
                     resource_type = "resource_group"
-                elif "aks" in response.lower():
+                elif "aks" in response:
                     resource_type = "aks"
-                elif "storage" in response.lower():
+                elif "storage" in response:
                     resource_type = "storage"
-                elif "sql" in response.lower():
+                elif "sql" in response:
                     resource_type = "sql"
-                elif "app_service" in response.lower():
+                elif "app_service" in response:
                     resource_type = "app_service"
             
             valid_resources = {'resource_group', 'aks', 'storage', 'sql', 'app_service'}
@@ -239,10 +321,33 @@ class AzureAgent:
         resource_type = params.resource_type or self.current_resource
         
         if not resource_type:
-            return {
-                "error": "No resource type",
-                "message": "I'm not sure which Azure resource you want to create. Could you please specify one of: Resource Group, AKS, Storage, SQL, or App Service?"
-            }
+            result = self._determine_resource_type_tool(UserInputSchema(user_input=user_input))
+            resource_type = result.get("resource_type")
+            if resource_type == "unknown":
+                return result
+        
+        if resource_type:
+            resource_type = resource_type.lower()
+            if 'resource_group' in resource_type or 'resourcegroup' in resource_type:
+                resource_type = 'resource_group'
+            elif 'aks' in resource_type or 'kubernetes' in resource_type:
+                resource_type = 'aks'
+            elif 'storage' in resource_type or 'storageaccount' in resource_type:
+                resource_type = 'storage'
+            elif 'sql' in resource_type or 'database' in resource_type:
+                resource_type = 'sql'
+            elif 'app_service' in resource_type or 'appservice' in resource_type or 'webapp' in resource_type:
+                resource_type = 'app_service'
+        
+        self.current_resource = resource_type
+        
+        if self.state:
+            if self.state.state.get("current_step") != "collect_resource_data":
+                self.state.update(
+                    current_step="collect_resource_data",
+                    resource_type=resource_type
+                )
+                self.state.mark_step_complete("select_resource")
         
         try:
             resource_agent = self.resource_agents.get(resource_type)
@@ -252,9 +357,12 @@ class AzureAgent:
                     "message": f"I'm having trouble with the {resource_type} agent. Let's try a different resource type."
                 }
             
+            if self.state and "collected_data" in self.state.state:
+                self.collected_data = self.state.state.get("collected_data", {})
+            
             result = resource_agent.process_input(user_input)
             
-            if result.get("field_name") and result.get("field_value"):
+            if result.get("field_name") and result.get("field_value") is not None:
                 field_name = result["field_name"]
                 field_value = result["field_value"]
                 
@@ -272,7 +380,7 @@ class AzureAgent:
                 
                 return {
                     "data_collection_complete": True,
-                    "message": f"Great! I have all the information I need for your Azure {resource_type.upper()} resource. I can generate the Crossplane manifest now."
+                    "message": f"Great! I have all the information I need for your Azure {resource_type} resource. I can generate the Crossplane manifest now."
                 }
             
             return {
@@ -338,9 +446,64 @@ class AzureAgent:
             "message": f"Current step: {current_step}, Resource type: {resource_type}, Collected data fields: {list(collected_data.keys()) if collected_data else 'None'}"
         }
     
+    def _is_general_question(self, user_input: str) -> bool:
+        """Determine if user input is a general question rather than providing data"""
+        current_step = "unknown"
+        resource_type = "unknown"
+        collected_fields = []
+        
+        if self.state:
+            current_step = self.state.state.get("current_step", "unknown")
+            resource_type = self.state.state.get("resource_type", "unknown") or self.current_resource or "unknown"
+            collected_data = self.state.state.get("collected_data", {})
+            collected_fields = list(collected_data.keys()) if collected_data else []
+        
+        response = self.llm.invoke(
+            self.intent_detection_prompt.format(
+                user_input=user_input,
+                current_step=current_step,
+                resource_type=resource_type,
+                collected_fields=", ".join(collected_fields) if collected_fields else "none"
+            )
+        )
+        print(response)
+        return response == "question"
+    
+    def _answer_general_question(self, question: str) -> str:
+        """Provide an answer to a general question about Azure or Crossplane"""
+        current_step = "unknown"
+        resource_type = "unknown"
+        
+        if self.state:
+            current_step = self.state.state.get("current_step", "unknown")
+            resource_type = self.state.state.get("resource_type", "unknown") or self.current_resource or "unknown"
+        
+        response = self.llm.invoke(
+            self.qa_prompt.format(
+                question=question,
+                resource_type=resource_type,
+                current_step=current_step
+            )
+        )
+        
+        return response
+    
     def process_message(self, message: str) -> Dict:
         """Process a user message and return a response"""
         try:
+            # First check if this is a general question
+            if self._is_general_question(message):
+                logger.info("Detected general question, providing answer")
+                answer = self._answer_general_question(message)
+                
+                # Add to conversation history but don't change state
+                self.memory.chat_memory.add_user_message(message)
+                self.memory.chat_memory.add_ai_message(answer)
+                
+                # Return formatted response
+                return {"output": answer}
+            
+            # Continue with normal flow if not a question
             response = self.agent_executor.invoke({"input": message})
             return response
         except Exception as e:

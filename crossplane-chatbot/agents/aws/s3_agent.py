@@ -23,22 +23,20 @@ class AWSS3Agent(AWSResourceAgent):
     def generate_manifest(self, collected_data):
         """Generate a Crossplane manifest for an S3 bucket"""
         template = f"""apiVersion: s3.aws.upbound.io/v1beta1
-kind: Bucket
-metadata:
-  name: {collected_data.get('name', 'my-s3-bucket')}
-spec:
-  forProvider:
-    region: {collected_data.get('region', 'us-east-1')}
-    acl: {collected_data.get('acl', 'private')}
-"""
-        
-        # Add versioning if provided
+                        kind: Bucket
+                        metadata:
+                        name: {collected_data.get('name', 'my-s3-bucket')}
+                        spec:
+                        forProvider:
+                            region: {collected_data.get('region', 'us-east-1')}
+                            acl: {collected_data.get('acl', 'private')}
+                    """
+                            
         if 'versioning' in collected_data and collected_data['versioning'].lower() in ['yes', 'true', '1']:
             template += """    versioningConfiguration:
       status: Enabled
 """
         
-        # Add encryption if provided
         if 'encryption' in collected_data and collected_data['encryption'].lower() in ['yes', 'true', '1']:
             template += """    serverSideEncryptionConfiguration:
       rules:
@@ -46,7 +44,6 @@ spec:
             sseAlgorithm: AES256
 """
         
-        # Add tags if provided
         if 'tags' in collected_data and collected_data['tags']:
             template += "    tags:\n"
             tags = collected_data['tags']

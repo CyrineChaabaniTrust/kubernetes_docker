@@ -4,6 +4,7 @@ import sys
 import uuid
 import json
 from dotenv import load_dotenv
+from langchain.schema import HumanMessage, AIMessage, SystemMessage
 
 dotenv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
 load_dotenv(dotenv_path)
@@ -105,7 +106,6 @@ def chat():
     
     orchestrator = active_conversations[conversation_id]['orchestrator']
     state = active_conversations[conversation_id]['state']
-    state.add_message('user', user_input)
     
     active_conversations[conversation_id]['messages'].append({
         'role': 'user',
@@ -138,7 +138,6 @@ def chat():
         })
     
     try:
-        print(user_input)
         response = orchestrator.process_message(user_input)
         
         if isinstance(response, dict) and response.get('error'):
@@ -146,8 +145,8 @@ def chat():
             state.update(error_count=state.state['error_count'] + 1)
         else:
             content = response
-            if isinstance(response, dict) and 'result' in response:
-                content = response['result']
+            if isinstance(response, dict) and 'output' in response:
+                content = response['output']
             
             manifest = None
             if isinstance(response, dict) and 'manifest' in response:
@@ -159,15 +158,12 @@ def chat():
                 state.mark_step_complete('generate_manifest')
             else:
                 assistant_message = content
-            
-            state.add_message('assistant', assistant_message)
-        
-        active_conversations[conversation_id]['messages'].append({
-            'role': 'assistant',
-            'content': assistant_message
-        })
-        
-        state.save()
+            print(assistant_message)
+            print(response)
+            active_conversations[conversation_id]['messages'].append({
+                'role': 'assistant',
+                'content': assistant_message
+            })
         
         current_state = orchestrator.state.state
         
@@ -197,7 +193,6 @@ def chat():
         })
         
         state.update(error_count=state.state['error_count'] + 1)
-        state.save()
         
         return jsonify({
             'error': e.user_message,
@@ -214,7 +209,6 @@ def chat():
         })
         
         state.update(error_count=state.state['error_count'] + 1)
-        state.save()
         
         return jsonify({
             'error': str(e),

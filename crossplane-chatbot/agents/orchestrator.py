@@ -38,6 +38,33 @@ class OrchestratorAgent:
         }
         self.manifest_generator = ManifestGenerator()
         
+        self.intent_detection_prompt = PromptTemplate(
+            input_variables=["user_input", "current_step"],
+            template="""
+            Analyze the user's message and determine if they are:
+            1. Asking a general question about cloud resources, Crossplane, or infrastructure
+            2. Providing information for the current step ({current_step})
+            
+            User message: "{user_input}"
+            
+            Return only one of these values:
+            - "question" if they're asking a general question
+            - "input" if they're providing information for the current step
+            """)
+        
+        # Add QA prompt
+        self.qa_prompt = PromptTemplate(
+            input_variables=["question"],
+            template="""
+            You are a helpful assistant with expertise in cloud infrastructure, Kubernetes, and Crossplane.
+            Answer the following question clearly and concisely:
+            
+            {question}
+            
+            Provide a helpful, informative answer in 2-3 sentences. After answering, remind the user 
+            we can continue with their resource creation process.
+            """)
+        
         tools = [
             StructuredTool.from_function(
                 name="determine_cloud_provider",
@@ -161,11 +188,46 @@ class OrchestratorAgent:
         )
         self.cloud_chain = LLMChain(llm=llm, prompt=self.cloud_prompt)
 
+    def _is_general_question(self, user_input: str) -> bool:
+        logger.info(f"Checking if user input is a general question: {user_input}")
+        """Determine if user input is a general question rather than providing data"""
+        current_step = self.state.state.get("current_step", "initial")
+        
+        response = self.llm.invoke(
+            self.intent_detection_prompt.format(
+                user_input=user_input,
+                current_step=current_step
+            )
+        )
+        print(response)
+        return response == "question"
+    
+    def _answer_general_question(self, question: str) -> str:
+        logger.info(f"Answering general question: {question}")
+        """Provide an answer to a general question about Crossplane or cloud resources"""
+        response = self.llm.invoke(
+            self.qa_prompt.format(question=question)
+        )
+        print(response)
+        return response
+
     @handle_errors
     def process_message(self, user_input):
+        logger.info(f"Processing message: {user_input}")
         """Process a message, determining cloud provider or forwarding to agent"""
         try:
+            if self._is_general_question(user_input):
+                logger.info("Detected general question, providing answer")
+                answer = self._answer_general_question(user_input)
+                
+                self.memory.chat_memory.add_user_message(user_input)
+                self.memory.chat_memory.add_ai_message(answer)
+                
+                return answer
+            
             cloud_provider = self.state.state.get("cloud_provider")
+            
+            self.memory.chat_memory.add_user_message(user_input)
             
             if cloud_provider:
                 logger.info(f"Forwarding message to {cloud_provider} agent")
@@ -173,15 +235,25 @@ class OrchestratorAgent:
                 if not agent:
                     return f"I'm sorry, I'm having trouble with the {cloud_provider.upper()} agent. Let's try again."
                 
-                return agent.process_message(user_input)
+                response = agent.process_message(user_input)
+                
+                if isinstance(response, dict):
+                    for key, value in response.items():
+                        if isinstance(value, (HumanMessage, AIMessage, SystemMessage)):
+                            response[key] = value.content
+                    
+                    if len(response) == 1 and "output" in response:
+                        return response["output"]
+                
+                return response
             else:
                 logger.info("Determining cloud provider")
-                print(user_input)
-                print("determining cloud provider")
                 result = self.agent_executor.invoke({"input": user_input})
-                print(result)
+                
                 if isinstance(result, dict) and "output" in result:
                     result_text = result["output"]
+                    if isinstance(result_text, (HumanMessage, AIMessage, SystemMessage)):
+                        result_text = result_text.content
                 else:
                     result_text = str(result)
                 
@@ -193,14 +265,17 @@ class OrchestratorAgent:
     @handle_errors
     def _determine_cloud_provider_tool(self, user_input: str) -> dict:
         """Tool to determine which cloud provider the user wants to use"""
+        logger.info(f"Determining cloud provider for user input: {user_input}")
         try:
             response = self.cloud_chain.invoke({"user_input": user_input})
-            cloud_provider = response.get("text", "").strip().lower()
+            cloud_provider = response["text"]
             
             if cloud_provider not in ["aws", "azure"]:
                 prompt = f"Based on this user message: '{user_input}', what cloud provider are they asking about? Answer with only 'aws', 'azure', or 'unknown'."
-                cloud_provider = self.llm.invoke(prompt).strip().lower()
-            
+                cloud_provider = self.llm.invoke(prompt)
+                print(cloud_provider)
+                cloud_provider = cloud_provider.get("output", "").lower()
+
             if cloud_provider in ["aws", "azure"]:
                 logger.info(f"Determined cloud provider: {cloud_provider}")
                 self.state.update(cloud_provider=cloud_provider, current_step="select_resource")
@@ -223,6 +298,7 @@ class OrchestratorAgent:
                         cloud_provider=cloud_provider.upper()
                     )
                 )
+                print(response)
                 return {
                     "cloud_provider": cloud_provider,
                     "message": response or f"Great! I'll help you create a {cloud_provider.upper()} resource with Crossplane. What type of {cloud_provider.upper()} resource would you like to create?"

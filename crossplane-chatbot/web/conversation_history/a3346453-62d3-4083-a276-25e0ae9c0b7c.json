@@ -1,6 +1,6 @@
 {
   "conversation_id": "a3346453-62d3-4083-a276-25e0ae9c0b7c",
-  "start_time": "2025-02-27T16:22:32.858865",
+  "start_time": "2025-02-27T16:34:38.955239",
   "current_step": "select_resource",
   "cloud_provider": "aws",
   "resource_type": null,
@@ -9,16 +9,21 @@
     {
       "role": "user",
       "message": "aws",
-      "timestamp": "2025-02-27T16:22:35.115988"
+      "timestamp": "2025-02-27T16:34:41.435417"
     },
     {
       "role": "assistant",
       "message": "Absolutely, I'd be happy to assist you with AWS resources! What type of AWS resource are you looking to create today?",
-      "timestamp": "2025-02-27T16:22:37.162513"
-    }
-  ],
-  "error_count": 0,
-  "completed_steps": [
-    "select_provider"
-  ]
-}
+      "timestamp": "2025-02-27T16:34:43.644731"
+    },
+    {
+      "role": "user",
+      "message": "what are the options",
+      "timestamp": "2025-02-27T16:34:51.722124"
+    },
+    {
+      "role": "assistant",
+      "message": {
+        "input": "what are the options",
+        "chat_history": [
+          
