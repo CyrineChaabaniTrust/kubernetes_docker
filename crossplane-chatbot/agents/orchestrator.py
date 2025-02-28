@@ -52,7 +52,6 @@ class OrchestratorAgent:
             - "input" if they're providing information for the current step
             """)
         
-        # Add QA prompt
         self.qa_prompt = PromptTemplate(
             input_variables=["question"],
             template="""
